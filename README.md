@@ -4,7 +4,7 @@
 
 It intents to automate plexmediaserver update without any user action. It's totally homemade and a lot of improvements can be provided in code quality.
 
-Actually I did those scripts to work some python and to not lose 10 minutes each time to update my server. And I'm fine with it for now.
+Actually I did those scripts to work some shell and python and to not lose 10 minutes each time to update my server. And I'm fine with it for now.
 
 
 # Main features
