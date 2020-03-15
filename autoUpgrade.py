@@ -43,6 +43,6 @@ for el in buildsToClean:
 
 
 
-print "|=============================|"
-print "|Script Done. WAS TOO EASY LOL|"
-print "|=============================|"
+print "|================================|"
+print "|Your plexmediaserver is updated!|"
+print "|================================|"
