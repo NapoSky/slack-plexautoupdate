@@ -67,7 +67,10 @@ echo Release Version: $releaseVersion $release
 
 if [ "$installed" != "$release" ]; then
 	echo "update available!"
+
+	# Uncomment this call if you enable Pushbullet notification
 	#sendNotification
+
 	echo "$shortDate - Updated PlexMediaServer from Version:$installedVersion to Version:$releaseVersion " >> "$scriptDir/plexUpdate.log"
 	updatePlex $1
 	else

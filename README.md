@@ -15,8 +15,6 @@ Actually I did those scripts to work some python and to not lose 10 minutes each
 - Auto restart your PlexMediaServer at each update.
 
 
-
-
 # Howto
 - Get the official [slackbuild package](https://slackbuilds.org/slackbuilds/14.2/multimedia/plexmediaserver.tar.gz)
 - Clone the repository, and put the content in the same folder 
@@ -25,3 +23,31 @@ Actually I did those scripts to work some python and to not lose 10 minutes each
 - Enjoy ! 
 
 
+# Variables
+in autoCatch.sh
+
+> plexToken = If you have Plex Pass, fill the variable to get all versions from Plex Pass.
+    
+in autoUpgrade.py
+
+> versionsToKeep = number of versions you want to keep. 
+> - Default = 5 
+> - Minimum = 2 (due to how the scripts are written for now)
+
+
+# Pushbullet Notifications
+If you use Pushbullet, there's actually a function to send notifications to your account. You need to change the access-token with one of yours in autocatch.sh :
+
+    function sendNotification {
+    printf -v JSON_STRING '{"body":"Plex Media server updated from '$installed' to '$release'","title":"Slack-o-Plex Upgrade","type":"note"}'
+    curl -s -i --header 'Access-Token: CHANGE_ME_PLEASE' \
+           --header 'Content-Type: application/json' \
+           --data-binary "$JSON_STRING" \
+           --request POST \
+           https://api.pushbullet.com/v2/pushes > /dev/null
+    }
+
+Also, you need to uncomment "sendNotification" at the end of the script.
+
+        # Uncomment this call if you enable Pushbullet notification
+        sendNotification
