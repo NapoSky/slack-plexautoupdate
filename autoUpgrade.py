@@ -15,7 +15,13 @@ listPackages.sort()
 
 # Get last package and current based on the before last
 lastVersion = listPackages[-1]
-currentVersion = listPackages[-2]
+
+# Check if there were olders installs
+try:
+    currentVersion = listPackages[-2]
+except:
+    print "We assume it's your first vanilla install, no need to try an upgrade."
+    sys.exit(0)
 
 
 ### Upgrade
@@ -23,26 +29,32 @@ print "Your current version is " + currentVersion
 print "You just build " + lastVersion + ". Prepare for upgrade."
 
 os.chdir("/tmp")
-os.system("upgradepkg " + currentVersion + "%" + lastVersion)
+try:
+    os.system("upgradepkg " + currentVersion + "%" + lastVersion)
+except:
+    # We assume you're already on the latest version if it fails. If not, investigate it.
+    print "You're already on the latest version."
 
 
 ### Keep things clean with 5 versions
 versionsToKeep = 5
-# From /tmp
 listToClean = listPackages[:versionsToKeep]
-
-for el in listToClean:
-    os.system("rm -f " + el)
-
-
-# do the same in SBo folder
 buildsToClean = listBuilds[:versionsToKeep]
 
-for el in buildsToClean:
-    os.system("rm -f " + el)
+if len(listToClean) < versionsToKeep or len(buildsToClean) < versionsToKeep:
+    print "No need to clean for now."
+
+else:
+    # From /tmp
+    for el in listToClean:
+        os.system("rm -f " + el)
+
+    # do the same in SBo folder
+    for el in buildsToClean:
+        os.system("rm -f " + el)
 
 
 
-print "|================================|"
-print "|Your plexmediaserver is updated!|"
-print "|================================|"
+print "|====================================|"
+print "|slack-plexautoupdate execution done!|"
+print "|====================================|"
