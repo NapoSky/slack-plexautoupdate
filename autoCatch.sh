@@ -8,6 +8,7 @@
 # 4 - restart the service with /etc/rc.d/rc.plexmediaserver restart
 
 # Place your Plex Token here if you have Plex Pass, otherwise leave it blank.
+# To know how to get your plexToken : https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/
 plexToken=""
 
 
