@@ -37,7 +37,7 @@ function updatePlex {
 # Add a break if releaseVersion is empty
 if [ -z "$releaseVersion" ]
 then
-  break
+  echo "Error during call, no releaseVersion provided. Exit right now." && exit 0
 fi
 echo downloading update...
 wget $downURL -O plexmediaserver_"$releaseVersion"_amd64.deb
