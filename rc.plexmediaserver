@@ -1,127 +1,210 @@
 #!/bin/sh
+### BEGIN INIT INFO
+# Provides:          plexmediaserver
+# Required-Start:    $remote_fs $syslog $networking
+# Required-Stop:
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Plex Media Server
+# Description:       Plex Media Server for Linux,
+#                    More information at http://www.plexapp.com
+# Author:            Plex Packaging team
+# Version:           1.06
+### END INIT INFO
 
-# Copyright 2016 Marcel Saegebarth <marc@mos6581.de>
-# All rights reserved.
-#
-# Redistribution and use of this script, with or without modification, is
-# permitted provided that the following conditions are met:
-#
-# 1. Redistributions of this script must retain the above copyright
-#    notice, this list of conditions and the following disclaimer.
-#
-#  THIS SOFTWARE IS PROVIDED BY THE AUTHOR "AS IS" AND ANY EXPRESS OR IMPLIED
-#  WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
-#  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO
-#  EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-#  SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-#  PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS;
-#  OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
-#  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
-#  OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
-#  ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-PKG_NAME="plexmediaserver"
-RUN_USER=plex
+# Set Crash Reporting identification variables
+export PLEX_MEDIA_SERVER_INFO_VENDOR="$(grep ^NAME= /etc/os-release | awk -F= '{print $2}' | tr -d \" )"
+export PLEX_MEDIA_SERVER_INFO_DEVICE="PC"
+export PLEX_MEDIA_SERVER_INFO_MODEL="$(uname -m)"
+export PLEX_MEDIA_SERVER_INFO_PLATFORM_VERSION="$(grep ^VERSION= /etc/os-release | awk -F= '{print $2}' | tr -d \" )"
 
-plexmediaserver_start() {
-  PIDOF=$(pidof "Plex Media Server")
+# Default values prior to ingesting and validating contents of /etc/default/plexmediaserver
+PlexUser="plex"
+PlexHome="/usr/lib/plexmediaserver"
+PlexAppSuppDir="/var/lib/plexmediaserver/Library/Application Support"
+PlexTempDir="/tmp"
+PlexStackSize=3000
+PlexPluginProcs=6
 
-  if [ -z "$PIDOF" ]; then
-  echo "Starting plexmediaserver..."
-  /bin/su -s /bin/sh -l $RUN_USER -c '/usr/bin/start_pms &> /dev/null &'
-  else
-    echo "plexmediaserver is already active (PID: $PIDOF)."
-    exit 1
-  fi
-}
+# Read configuration variable file if it is present
+[ -r /etc/default/plexmediaserver ] && . /etc/default/plexmediaserver
 
-plexmediaserver_status() { #Is the PKG already running? if so, exit the script
-  PIDOF=$(pidof "Plex Media Server")
-   if [ ! -z "$PIDOF" ]; then
-        echo "$PKG_NAME is already running"
-        exit 1
-   else
-        echo "$PKG_NAME is not running"
-   fi
-   #ok, we survived so the PKG should not be running
-}
-
-
-plexmediaserver_stop() {
-  PIDOF=$(pidof "Plex Media Server")
-  # plugins may still running when stopping plexmediaserver on its startup
-  # process
-  PGREP_PLUGINS=$(pgrep -f "Plex Plug-in")
-  PGREP_DLNA=$(pgrep -f "Plex DLNA Server")
-  PGREP_TUNER=$(pgrep -f "Plex Tuner Service")
-  PGREP_EGP=$(pgrep -f "Plex EAE Service")
-  PGREP_TRANSCODER=$(pgrep -f "Plex Transcoder")
-  PGREP_PLEXRELAY=$(pgrep -f "Plex Relay")
-
-
-  if [ -z "$PIDOF" ] && [ -z "$PGREP_PLUGINS" ]; then
-    echo "plexmediaserver is not running..."
-    exit 1
-  else
-    echo -n "Stopping plexmediaserver..."
-
-    if [ -n "$PIDOF" ]; then
-      kill -9 $PIDOF
-    fi
-
-    if [ -n "$PGREP_PLUGINS" ]; then
-      for i in "$PGREP_PLUGINS"; do
-        kill -9 $i
-      done
-    fi
-
-    if [ -n "$PGREP_DLNA" ]; then
-      for i in "$PGREP_DLNA"; do
-        kill -9 $i
-      done
-    fi
-
-    if [ -n "$PGREP_TUNER" ]; then
-      for i in "$PGREP_TUNER"; do
-        kill -9 $i
-      done
-    fi
-
-    if [ -n "$PGREP_EGP" ]; then
-      for i in "$PGREP_EGP"; do
-        kill -9 $i
-      done
-    fi
-
-    if [ -n "$PGREP_TRANSCODER" ]; then
-      for i in "$PGREP_TRANSCODER"; do
-        kill -9 $i
-      done
-    fi
-
-    if [ -n "$PGREP_PLEXRELAY" ]; then
-      for i in "$PGREP_PLEXRELAY"; do
-        kill -9 $i
-      done
-    fi
-
-
-
-    echo "done"
-  fi
-}
-
-plexmediaserver_restart() {
-  plexmediaserver_stop
-  sleep 3
-  plexmediaserver_start
-}
+Running=$(ps -ef | grep 'Plex Media Server'| grep -v grep | wc -l)
 
 case "$1" in
-    start) plexmediaserver_start   ;;
-     stop) plexmediaserver_stop    ;;
-  restart) plexmediaserver_restart ;;
-   status) plexmediaserver_status  ;;
-        *) echo "USAGE: $0 start|stop|restart|status"
-           exit 1 ;;
+  start)
+    if [ $Running -gt 0 ]; then
+      echo "Plex is already running."
+      exit 0
+    fi
+
+    if [ -f /etc/default/locale ]; then
+      export LANG="$(cat /etc/default/locale | awk -F '=' '/LANG=/{print $2}' | sed 's/"//g')"
+      export LC_ALL="$LANG"
+    fi
+
+    # Use Read-Writeback approach to handle when variables aren't global.
+
+    # Check PLEX_USER
+    if   [ "$PLEX_USER" != "" ]; then
+      if [ "$(getent passwd "$PLEX_USER")" != "" ]; then
+        PlexUser="$PLEX_USER"
+      else
+        echo "${0}: No such username: \"$PLEX_USER\". Retaining \"$PlexUser\" as default username."
+      fi
+    fi
+
+    # Check PLEX_MEDIA_SERVER_USER (Supersedes PLEX_USER)
+    if   [ "$PLEX_MEDIA_SERVER_USER" != "" ]; then
+      if [ "$(getent passwd "$PLEX_MEDIA_SERVER_USER")" != "" ]; then
+        PlexUser="$PLEX_MEDIA_SERVER_USER"
+      else
+        echo "${0}: No such username: \"$PLEX_MEDIA_SERVER_USER\".  Retaining \"$PlexUser\" as default username."
+      fi
+    fi
+
+    # Prevent "UNKNOWN" when in IPA/LDAP environments  (revert to default)
+    if [ "$PlexUser" = "UNKNOWN" ]; then
+      echo "${0}: Illegal username:  'UNKNOWN'.  Retaining \"plex\" as username."
+      PlexUser="plex"
+    fi
+
+    # PlexUser's HOME directory is the default location. Supersede if specified
+    PlexAppSuppDir="$(getent passwd "$PlexUser" | awk -F: '{print $6}')/Library/Application Support"
+
+    # If user specified AppSuppDir, it must already exist.  This overrides the $PlexUser's "$HOME"
+    if   [    "$PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR" != "" ]; then
+      if [ -d "$PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR" ]; then
+        PlexAppSuppDir="$PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR"
+      else
+        echo "${0}: Given Application Support Directory \"$PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR\" does not exist.  Ignoring."
+      fi
+    fi
+
+    # Check TempDir
+    Candidate=""
+    if   [ "$PLEX_MEDIA_SERVER_TMPDIR" != "" ]; then
+      Candidate="$PLEX_MEDIA_SERVER_TMPDIR"
+
+    # Be generous with TEMP DIR specification
+    elif [ "$TMPDIR" != "" ]; then
+      Candidate="$TMPDIR"
+
+    elif [ "$TEMP" != "" ]; then
+      Candidate="$TEMP"
+
+    elif [ "$TMP" != "" ] && [ -d "$TMP" ]; then
+      Candidate="$TMP"
+    fi
+
+    # Validate TempCandidate
+    if [ "$Candidate" != "" ]; then
+      if [ -d "$Candidate" ]; then
+        PlexTempDir="$Candidate"
+      else
+        echo "${0}: Temp Directory does not exist: \"$Candidate\".  Using default location."
+      fi
+    fi
+
+    # Plug-in Procs  (No checking.  PMS handles internally)
+    if [ "$PLEX_MEDIA_SERVER_MAX_PLUGIN_PROCS" != "" ]; then
+      Candidate="$(echo $PLEX_MEDIA_SERVER_MAX_PLUGIN_PROCS | grep -x -E '[[:digit:]]+' )"
+      if [ "$Candidate" != "" ]; then
+        PlexPluginProcs="$Candidate"
+      else
+        echo "${0}: Non-numeric Max Plug-in Procs given: \"$PLEX_MEDIA_SERVER_MAX_PLUGIN_PROCS\".  Using default value."
+      fi
+    fi
+
+    # Stack Size
+    if [ "$PLEX_MEDIA_SERVER_MAX_STACK_SIZE" != "" ]; then
+      Candidate="$(echo $PLEX_MEDIA_SERVER_MAX_STACK_SIZE | grep -x -E '[[:digit:]]+' )"
+      if [ "$Candidate" != "" ]; then
+        PlexStackSize="$Candidate"
+      else
+        echo "${0}: Non-numeric Max Stack Size given: \"$PLEX_MEDIA_SERVER_MAX_STACK_SIZE\".  Using default value."
+      fi
+    fi
+
+    # Verify Plex Media Server is indeed where it says it is
+    if [ "$PLEX_MEDIA_SERVER_HOME" != "" ]; then
+      if [ -d "$PLEX_MEDIA_SERVER_HOME" ]; then
+        PlexHome="$PLEX_MEDIA_SERVER_HOME"
+      else
+        echo "${0}: Given application location \"${PLEX_MEDIA_SERVER_HOME}\" does not exist.  Using default location."
+      fi
+    fi
+
+    # Create AppSuppDir if not present and set ownership
+    if [ ! -d "$PlexAppSuppDir" ]; then
+      mkdir -p "$PlexAppSuppDir"
+      if [ $? -eq 0 ]; then
+        chown "${PlexUser}"."${PlexUser}" "$PlexAppSuppDir"
+      else
+        echo "ERROR: Could not create \"$PlexAppSuppDir\".  System error code $?"
+        exit 1
+      fi
+    fi
+
+    # Build the final runtime environment variables.  Specify these parameters in /etc/default/plexmediaserver
+    export PLEX_MEDIA_SERVER_USER="$PlexUser"
+    export PLEX_MEDIA_SERVER_MAX_PLUGIN_PROCS="$PlexPluginProcs"
+    export PLEX_MEDIA_SERVER_HOME="$PlexHome"
+    export PLEX_MEDIA_SERVER_MAX_STACK_SIZE="$PlexStackSize"
+    export PLEX_MEDIA_SERVER_TMPDIR="$PlexTempDir"
+    export PLEX_MEDIA_SERVER_APPLICATION_SUPPORT_DIR="$PlexAppSuppDir"
+
+    export LD_LIBRARY_PATH="${PLEX_MEDIA_SERVER_HOME}/lib"
+    export TMPDIR="${PLEX_MEDIA_SERVER_TMPDIR}"
+    ulimit -s "$PLEX_MEDIA_SERVER_MAX_STACK_SIZE"
+
+    # Add sleep - for those who launch with this script
+    echo "Starting Plex Media Server."
+
+    su -m "$PLEX_MEDIA_SERVER_USER" -s /bin/sh -c "exec ${PLEX_MEDIA_SERVER_HOME}/Plex\ Media\ Server &" >/dev/null 2>&1
+    sleep 3
+    ;;
+
+  stop)
+    if [ $Running -eq 0 ]; then
+      echo "Plex Media Server is not running."
+      exit 0
+    fi
+    echo "Shutting down Plex Media Server: "
+
+    # Ask nicely
+    pids="$(ps -ef | grep 'Plex Media Server' | grep -v grep | awk '{print $2}')"
+    kill -15 $pids
+
+    sleep 5
+
+    # Stuck
+    pids="$(ps -ef | grep /usr/lib/plexmediaserver | grep -v grep | awk '{print $2}')"
+
+    if [ "$pids" != "" ]; then
+      kill -9 $pids
+    sleep 2
+    fi
+    ;;
+
+  restart)
+    $0 stop
+    sleep 5
+    $0 start
+    ;;
+
+  status)
+    if [ $Running -gt 0 ]; then
+      echo "Plex Media Server is running."
+    else
+      echo "Plex Media Server is stopped."
+    fi
+    ;;
+
+  *)
+	echo "Usage: $0 {start|stop|restart|status}"
+	exit 1
+	;;
 esac
 
+exit 0
